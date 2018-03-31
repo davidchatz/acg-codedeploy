@@ -1,0 +1,150 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ACG AWS CodeDeploy IAM S3 Setup
+
+Parameters:
+
+  YourName:
+    Description: Prefix to keep names unique
+    Type: String
+
+Resources:
+
+  Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Join ["-", [!Ref YourName, "codedeploy"]]
+      AccessControl: Private
+
+  CodeDeployServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: "/"
+      RoleName: !Join ["-", [!Ref YourName, "CodeDeployServiceRole"]]
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                # Don't have to specify the region anymore, but I've done it here to be consistent with the course
+                - !Join [".", ["codedeploy", !Ref "AWS::Region", "amazonaws.com"]]
+            Action: 
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+
+  SimpleInstanceProfileRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ["-", [!Ref YourName, "SimpleInstanceProfileRole"]]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service:
+                - ec2.amazonaws.com
+            Action: 
+              - "sts:AssumeRole"
+  
+  SimpleInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Join ["-", [!Ref YourName, "SimpleInstanceProfile"]]
+      Roles:
+      - !Ref SimpleInstanceProfileRole
+      Path: "/"
+
+  SimpleInstanceProfilePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Join ["-", [!Ref YourName, "SimpleCodeDeployInstanceProfilePolicy"]]
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Action: 
+              - "s3:Get*"
+              - "s3:List*"
+            Resource:
+              - !GetAtt Bucket.Arn
+              - !Join ["", [!GetAtt Bucket.Arn, "/*"]]
+      Roles:
+        - !Ref SimpleInstanceProfileRole
+
+  AdvancedInstanceProfileRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ["-", [!Ref YourName, "AdvancedInstanceProfileRole"]]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service:
+                - ec2.amazonaws.com
+            Action: 
+              - "sts:AssumeRole"
+  
+  AdvancedInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Join ["-", [!Ref YourName, "AdvancedInstanceProfile"]]
+      Roles:
+      - !Ref AdvancedInstanceProfileRole
+      Path: "/"
+
+  AdvancedInstanceProfilePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Join ["-", [!Ref YourName, "AdvancedCodeDeployInstanceProfilePolicy"]]
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Action: 
+              - "s3:Get*"
+              - "s3:List*"
+            Resource:
+              - !GetAtt Bucket.Arn
+              - !Join ["", [!GetAtt Bucket.Arn, "/*"]]
+              - !Join ["", ["arn:aws:s3:::aws-codedeploy-", !Ref "AWS::Region", "/*"]]
+          -
+            Effect: "Allow"
+            Action:
+              - "elasticloadbalancing:DeregisterInstancesFromLoadBalancer"
+              - "elasticloadbalancing:DescribeInstanceHealth"
+              - "elasticloadbalancing:DescribeLoadBalancerAttributes"
+              - "elasticloadbalancing:DescribeLoadBalancers"
+              - "elasticloadbalancing:RegisterInstancesWithLoadBalancer"
+              - "autoscaling:Describe*"
+              - "autoscaling:UpdateAutoScalingGroup"
+              - "autoscaling:EnterStandby"
+              - "autoscaling:ExitStandby"
+            Resource: "*"
+      Roles:
+        - !Ref AdvancedInstanceProfileRole
+
+  GitHubUser:
+    Type: AWS::IAM::User
+    Properties: 
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCodeDeployDeployerAccess
+      Path: /
+      UserName: !Join ["-", [!Ref YourName, "GitHub"]]
+
+Outputs:
+
+  SimpleInstanceProfile:
+    Description: ARN of simple instance profile
+    Value: !GetAtt SimpleInstanceProfile.Arn
+
+  AdvancedInstanceProfile:
+    Description: ARN of advanced instance profile
+    Value: !GetAtt AdvancedInstanceProfile.Arn  
